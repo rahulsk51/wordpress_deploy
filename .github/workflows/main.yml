@@ -1,0 +1,43 @@
+name: Deploy WordPress
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Set up SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -t rsa 10.10.2.103 >> ~/.ssh/known_hosts
+          chmod 644 ~/.ssh/known_hosts
+
+      - name: Deploy to Server
+        run: |
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no root@10.10.2.103 << 'EOF'
+            cd /var/www/html/wordpress
+            git pull origin main
+            # Additional build or setup commands if needed
+          EOF
+
+      - name: Update Nginx Configuration
+        run: |
+          scp -i ~/.ssh/id_rsa nginx.conf root@10.10.2.103_IP:/etc/nginx/nginx.conf
+          ssh -i ~/.ssh/id_rsa root@10.10.2.103 "sudo systemctl restart nginx"
+
+      - name: Update WordPress Configuration
+        run: |
+          scp -i ~/.ssh/id_rsa wp-config.php root@10.10.2.103:/var/www/html/wordpress/wp-config.php
+
+      - name: Renew Let's Encrypt Certificate
+        run: |
+          ssh -i ~/.ssh/id_rsa root@10.10.2.103 "sudo certbot renew"
