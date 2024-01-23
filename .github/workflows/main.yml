@@ -13,31 +13,38 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v2
 
-      - name: Set up SSH
-        run: |
-          mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -t rsa 10.10.2.103 >> ~/.ssh/known_hosts
-          chmod 644 ~/.ssh/known_hosts
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          extensions: 'mbstring, mysqli'
 
-      - name: Deploy to Server
+      - name: Install Composer
         run: |
-          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no root@10.10.2.103 << 'EOF'
-            cd /var/www/html/wordpress
-            git pull origin main
-            # Additional build or setup commands if needed
-          EOF
+          curl -sS https://getcomposer.org/installer | php
+          sudo mv composer.phar /usr/local/bin/composer
 
-      - name: Update Nginx Configuration
-        run: |
-          scp -i ~/.ssh/id_rsa nginx.conf root@10.10.2.103_IP:/etc/nginx/nginx.conf
-          ssh -i ~/.ssh/id_rsa root@10.10.2.103 "sudo systemctl restart nginx"
+      - name: Install Dependencies
+        run: composer install
 
-      - name: Update WordPress Configuration
+      - name: Build Project
         run: |
-          scp -i ~/.ssh/id_rsa wp-config.php root@10.10.2.103:/var/www/html/wordpress/wp-config.php
+          # Add build commands here if needed
 
-      - name: Renew Let's Encrypt Certificate
-        run: |
-          ssh -i ~/.ssh/id_rsa root@10.10.2.103 "sudo certbot renew"
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v0.4.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USERNAME }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            # Stop Nginx and MySQL if running
+            sudo service nginx stop
+            sudo service mysql stop
+
+            # Transfer files to the server
+            scp -r ./* ${{ secrets.SSH_USERNAME }}@${{ secrets.SSH_HOST }}:${{ secrets.SSH_REMOTE_PATH }}
+
+            # Restart Nginx and MySQL
+            sudo service nginx start
+            sudo service mysql start
