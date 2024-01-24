@@ -33,3 +33,4 @@ jobs:
             sudo apt-get -y update
             cd home
             sudo mv * /var/www/html
+            chown -R www-data:www-data /var/www/html/*
